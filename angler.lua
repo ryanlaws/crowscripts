@@ -1,4 +1,5 @@
 -- angler shuffles scales
+-- v0.0.1
 -- Requires crow > 2.x
 --
 -- This quantizes the input voltage to a chord. After a certain number of
