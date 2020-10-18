@@ -67,7 +67,7 @@ function init()
             last_oct = e.oct
         end
 
-        note_chg = (note_chg or 0) + 1
+        note_chg = note_chg + 1
 
         if oct_chg > max_oct_chg or note_chg > max_note_chg then
             mutate()
