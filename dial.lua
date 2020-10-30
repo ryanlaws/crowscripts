@@ -21,7 +21,7 @@
 
 -- Configuration - customize these for sure!
 local bpm_min = 60
-local bpm_max = 6000
+local bpm_max = 240
 local voltage_minimum = 0 -- Adjust based on voltage source
 local voltage_maximum = 5
 
