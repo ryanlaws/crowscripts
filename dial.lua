@@ -21,7 +21,7 @@
 
 -- Configuration - customize these for sure!
 local bpm_min = 60
-local bpm_max = 240
+local bpm_max = 6000
 local voltage_minimum = 0 -- Adjust based on voltage source
 local voltage_maximum = 5
 
@@ -63,7 +63,6 @@ function init()
             if math.abs(bpm - new_bpm) >= bpm_hysteresis then
                 bpm = new_bpm
                 v_last = v -- only if action taken
-                print("set bpm to " .. bpm .. " at " .. time())
             end
         end
 
