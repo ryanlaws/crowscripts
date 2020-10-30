@@ -107,10 +107,6 @@ function reconcile(o)
     end
 end
 
-function div_to_seconds(divisor)
-    return 1 / (bpm / 60 * divisor)
-end
-
 function v_to_bpm(v)
     v = math.min(math.max(v, voltage_minimum), voltage_maximum)
     local ratio = (v - voltage_minimum) / (voltage_maximum - voltage_minimum)
