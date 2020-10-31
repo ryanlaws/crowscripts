@@ -1,5 +1,5 @@
 -- dial marks notches in time
--- v0.0.1
+-- v0.1.0
 -- Requires crow > 2.x
 --
 -- Generate pulses and shapes at voltage-controlled BPM.
