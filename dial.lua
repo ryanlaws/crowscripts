@@ -13,8 +13,6 @@
 
 -- FEATURE CREEP
 -- - split cycle functions (i.e. distribute phase) a la TC
--- - square waves
--- - config BPM quantization
 
 
 -- ********************************************************************
