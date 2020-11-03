@@ -24,6 +24,7 @@
 -- --------------------------------------------------------------------
 local bpm_min = 60
 local bpm_max = 240
+local bpm_quantize = 4 -- 1, 2, 4, or 10
 local voltage_minimum = 0 -- Adjust based on voltage source
 local voltage_maximum = 10
 
@@ -133,9 +134,9 @@ function v_to_bpm(v)
     v = pinch(v, voltage_minimum, voltage_maximum)
     local ratio = (v - voltage_minimum) / (voltage_maximum - voltage_minimum)
     local new_bpm = bpm_min + (ratio * (bpm_max - bpm_min))
-    local frac = new_bpm % 1
-    new_bpm = new_bpm - frac
-    return new_bpm + (frac < 0.5 and 0 or 1)
+    local frac = (new_bpm / bpm_quantize) % 1
+    new_bpm = new_bpm - (frac * bpm_quantize)
+    return new_bpm + ((frac < 0.5 and 0 or 1) * bpm_quantize)
 end
 
 function init()
@@ -143,6 +144,11 @@ function init()
     local bpm_hysteresis = 1
     local v_hysteresis = 0.005
     local update_time = make_update_time()
+    bpm_quantize = (
+        bpm_quantize == 2 or
+        bpm_quantize == 4 or
+        bpm_quantize == 10
+    ) and bpm_quantize or 1
 
     -- state
     local v_last = -20
