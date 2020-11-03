@@ -30,7 +30,31 @@ local voltage_maximum = 10
 -- Cycles (edit function body!)
 -- --------------------------------------------------------------------
 function configure()
+    local maj = { 0, 2/12, 4/12, 5/12, 7/12, 9/12, 11/12 }
+
     return {
+        -- Polyrhythmic arps
+        { 1/2, 0  , split(1/5,
+                duty(1/3, maj[5], maj[7]),
+                duty(1/3, maj[2], maj[4])
+            )
+        },
+        { 2/3, 1/3, split(1/5,
+                duty(1/3, maj[7], maj[2]),
+                duty(1/3, maj[4], maj[5])
+            )
+        },
+        { 2/5, 1/4, split(1/5,
+                duty(1/3, maj[2], maj[4]),
+                duty(1/3, maj[5], maj[7])
+            )
+        },
+        { 4/7, 1/5, split(1/5,
+                duty(1/3, maj[4], maj[5]),
+                duty(1/3, maj[7], maj[2])
+            )
+        }
+
         -- All fours
         --1, 1, 1, 1
 
@@ -41,10 +65,10 @@ function configure()
         -- { 1, 1/4 }
 
         -- All fours, striated, BPM-synced gates
-        { 1, 0/4, duty(1/4) },
-        { 1, 3/4, duty(1/4) },
-        { 1, 2/4, duty(1/4) },
-        { 1, 1/4, duty(1/4) }
+        --{ 1, 0/4, duty(1/4) },
+        --{ 1, 3/4, duty(1/4) },
+        --{ 1, 2/4, duty(1/4) },
+        --{ 1, 1/4, duty(1/4) }
 
         -- Lab coat
         --d(1/4, 0),
@@ -106,6 +130,22 @@ function duty(split, first, second)
     return function (o)
         return function (phase)
             output[o].volts = (phase < split) and first or second
+        end
+    end
+end
+
+function split(point, first, second)
+    return function (o)
+        first = first(o)
+        second = second(o)
+        return function(phase)
+            if (phase < point) then
+                first(point > 0 and (phase / point)
+                    or 0)
+            else
+                second(point < 1 and ((phase - point) / (1 - point))
+                    or 1)
+            end
         end
     end
 end
