@@ -37,10 +37,16 @@ function configure()
         --1, 1, 1, 1
 
         -- All fours, striated
-        { 1, 0/4 },
-        { 1, 3/4 },
-        { 1, 2/4 },
-        { 1, 1/4 }
+        -- { 1, 0/4 },
+        -- { 1, 3/4 },
+        -- { 1, 2/4 },
+        -- { 1, 1/4 }
+
+        -- All fours, striated, BPM-synced gates
+        { 1, 0/4, duty(1/4) },
+        { 1, 3/4, duty(1/4) },
+        { 1, 2/4, duty(1/4) },
+        { 1, 1/4, duty(1/4) }
 
         -- Lab coat
         --d(1/4, 0),
@@ -90,6 +96,18 @@ function raw(start, finish)
     return function (o)
         return function (phase)
             output[o].volts = start + (phase * range)
+        end
+    end
+end
+
+function duty(split, first, second)
+    -- is validation a luxury we can afford?
+    first = pinch(first or 5, -10, 10)
+    second = pinch(second or 0, -10, 10)
+    split = pinch(split or 0.5, 0, 1)
+    return function (o)
+        return function (phase)
+            output[o].volts = (phase < split) and first or second
         end
     end
 end
