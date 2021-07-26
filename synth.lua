@@ -93,7 +93,14 @@ end
 -- then here, we just look up the prepared command
 -- within the the aforementioned LUT.
 function setup_i2c()
+    local c2 = {}
+    c2[00] = function (ch, value)
+        local note = u16_to_v(value)
+        states[ch].nte = note
+        trigger_note(ch)
+    end
     ii.self.call2 = function (cmd, value)
+
         --[[
 | desc               | fn | ...args             |
 |--------------------|----|---------------------|
@@ -124,18 +131,21 @@ function setup_i2c()
         ch = (ch == 0 and 4) or ch
         cmd = cmd - ch
         print('ch:'..ch..' cmd:'..cmd..' val:'..value)
-        if cmd  < 00 then
+        if cmd < 00 then
             print("negative command???")
 
         -- | ch play @ frq      | C2 | 01-04, frq          |
         elseif cmd == 00 then
             local note = u16_to_v(value)
-            print("ch "..ch.." play @ note "..note)
+            states[ch].nte = note
             trigger_note(ch)
 
         -- | ch tmb set         | C2 | 15-18, tmb          |
         elseif cmd == 14 then
             -- this WILL BREAK LCG
+            -- there is a bug w/ model 1 when pw = 16250
+            -- detuned, undertones, sounds SICK
+            -- DO NOT FIX IT YET
             set_state(ch, 'pw', value / 16384)
 
         -- | ch env frq (Hz*10) | C2 | 21-24, Hz*10 (-lp)  |
@@ -151,12 +161,19 @@ function setup_i2c()
             print('efr: '..value)
             set_state(ch, 'efr', value)
 
+        -- | ch env sym (A:D)   | C2 | 25-28, sym          |
+        elseif cmd == 24 then
+            set_state(ch, 'esy', value / 16384)
+
         -- | ch env>frq         | C2 | 41-44, dep          |
         elseif cmd == 40 then
             local v = u16_to_v(value)
             -- print ("env->v8: "..v)
             set_state(ch, 'ent', v)
 
+        -- | ch env>tmb         | C2 | 35-38, dep          |
+        elseif cmd == 34 then
+            set_state(ch, 'epw', value / 16384)
         -- | ch lfo spd (Hz*10) | C2 | 45-48, Hz*10 (+rst) |
         elseif cmd == 44 then
             value = 2 ^ u16_to_v(value)
@@ -211,19 +228,10 @@ function setup_state(i)
         psl=16384,
         msl=16384,
         -- this crashes when I set it negative (or 0?)
-        efr=100,
-        esy=-1,
-        ecr=4,
-        epw=0,
-        ent=0,
-        eph=1,
 
-        lfr=5,
-        lsy=0,
-        lcr=0,
-        lpw=0,
-        lnt=0,
-        lph=-1
+        efr=100, esy=-1, ecr=4, epw=0, ent=0, eph=1,
+
+        lfr=5, lsy=0, lcr=0, lpw=0, lnt=0, lph=-1
     }
     print("setting up state "..i)
     print("state #"..i..": "..states[i].nte)
@@ -247,7 +255,10 @@ function acc(phase, freq, sec, looping)
 end
 
 function trigger_note(ch)
-    states[ch].eph = -1
+    -- do not retrigger attack
+    if states[ch].eph >= states[ch].esy then
+        states[ch].eph = -1
+    end
 end
 
 function update_synth(i)
