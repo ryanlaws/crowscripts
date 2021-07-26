@@ -12,6 +12,7 @@
 --DONE:
 -- * [x] write volt -> freq convertor
 local states = {}
+local updating = false
 
 -- -32768 to 32767
 function u16_to_v(u16)
@@ -31,8 +32,17 @@ function setup_input()
         -- local new = 1/((v+6) * 4000) -- time
         local v = v8_to_freq(v)
 
-        for i = 1, 4 do
-            update_synth(i)
+        if not updating then
+            updating = true
+            for i = 1, 4 do
+                update_synth(i)
+            end
+            updating = false
+        else
+            if updating ~= -1 then
+                updating = -1
+                print("frig off! time to die.")
+            end
         end
     end
 
@@ -78,6 +88,10 @@ function setup_synths()
     setup_synth(4, 3)
 end
 
+-- the below if conditions need to get assigned to a LUT
+-- during the init() phase.
+-- then here, we just look up the prepared command
+-- within the the aforementioned LUT.
 function setup_i2c()
     ii.self.call2 = function (cmd, value)
         --[[
@@ -115,19 +129,27 @@ function setup_i2c()
 
         -- | ch play @ frq      | C2 | 01-04, frq          |
         elseif cmd == 00 then
-            note = u16_to_v(value)
+            local note = u16_to_v(value)
             print("ch "..ch.." play @ note "..note)
             trigger_note(ch)
 
         -- | ch tmb set         | C2 | 15-18, tmb          |
         elseif cmd == 14 then
-            set_state(ch, 'efr', value / 100)
+            -- this WILL BREAK LCG
+            set_state(ch, 'pw', value / 16384)
+
         -- | ch env frq (Hz*10) | C2 | 21-24, Hz*10 (-lp)  |
         elseif cmd == 20 then
+            -- this is no good. do something smarter.
+            -- scale v/8, whatever.
             -- TODO: handle negative values (loop?)
-            value = math.abs(value)
             -- print ("env->freq: "..value / 100)
-            set_state(ch, 'efr', value / 100)
+            
+            -- value = math.abs(value)
+            -- set_state(ch, 'efr', value / 100)
+            value = 2 ^ u16_to_v(0 - value)
+            print('efr: '..value)
+            set_state(ch, 'efr', value)
 
         -- | ch env>frq         | C2 | 41-44, dep          |
         elseif cmd == 40 then
@@ -137,9 +159,12 @@ function setup_i2c()
 
         -- | ch lfo spd (Hz*10) | C2 | 45-48, Hz*10 (+rst) |
         elseif cmd == 44 then
-            value = math.abs(value)
+            value = 2 ^ u16_to_v(value)
+            print('lfr: '..value)
             -- print ("env->freq: "..value / 100)
-            set_state(ch, 'lfr', value / 100)
+            -- value = math.abs(value)
+            -- set_state(ch, 'lfr', value / 100)
+            set_state(ch, 'lfr', value)
 
         -- | ch lfo>frq         | C2 | 65-68, dep          |
         elseif cmd == 64 then
@@ -169,7 +194,9 @@ function setup_i2c()
 end
 
 function set_state(ch, key, value)
-    states[ch][key] = value
+    if value ~= nil then
+        states[ch][key] = value
+    end
 end
 
 function setup_state(i)
@@ -188,14 +215,14 @@ function setup_state(i)
         esy=-1,
         ecr=4,
         epw=0,
-        ent=2,
+        ent=0,
         eph=1,
 
-        lfr=20,
+        lfr=5,
         lsy=0,
         lcr=0,
         lpw=0,
-        lnt=1,
+        lnt=0,
         lph=-1
     }
     print("setting up state "..i)
@@ -261,6 +288,8 @@ function update_synth(i)
 end
 
 function init ()
+    updating = false
+
     -- sets up the synths
     for i = 1, 4 do
         setup_state(i)
