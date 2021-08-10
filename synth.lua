@@ -1,5 +1,3 @@
--- * [x] fix crash when switching to noise
-    -- play the action, dude. LOL
 -- * [ ] finish TT API
 --[[
 | desc               | fn | ...args             |
@@ -27,11 +25,94 @@
 | play preset, amp   | C3 | 11-14, frq, amp     |
 --]]
 local states = {}
+local ch = 1
+local cmd = 20
+local presets = {}
 local updating = false
 
+local bad_cmd = function (ch, value, cmd) 
+    --print("don't know cmd "..cmd.."!")
+end
+
+local c2 = {}
+-- | ch play @ frq      | C2 | 01-04, frq          |
+c2[00] = function (ch, tt_value)
+    states[ch].nte = u16_to_v10(tt_value)
+    trigger_note(ch)
+end
+-- | ch play @ amp      | C2 | 05-08, amp (+rtrg)  |
+-- | ch frq set (leg)   | C2 | 11-14, frq          |
+-- | ch tmb set         | C2 | 15-18, tmb          |
+    -- there is a bug w/ model 1 when pw = 16250
+    -- detuned, undertones, sounds SICK
+    -- DO NOT FIX IT YET
+c2[14] = function (ch, v5)
+    --set_state(ch, 'pw', tt_value / 16384)
+    set_state(ch, 'pw', v5 / 5)
+end
+-- | ch env frq (Hz*10) | C2 | 21-24, Hz*10 (-lp)  |
+c2[20] = function (ch, v5)
+    --set_state(ch, 'efr', 2 ^ u16_to_v10(0 - tt_value))
+    v5 = 2 ^ (0 - v5)
+    set_state(ch, 'efr', v5)
+end
+-- | ch env sym (A:D)   | C2 | 25-28, sym          |
+c2[24] = function (ch, v5)
+    --set_state(ch, 'esy', tt_value / 16384)
+    set_state(ch, 'esy', v5 / 5)
+end
+-- | ch env crv         | C2 | 31-34, exp          |
+-- | ch env>tmb         | C2 | 35-38, dep          |
+c2[34] = function (ch, v5)
+    --set_state(ch, 'epw', tt_value / 16384)
+    set_state(ch, 'epw', v5 / 5)
+end
+-- | ch env>frq         | C2 | 41-44, dep          |
+c2[40] = function (ch, v5)
+    --set_state(ch, 'ent', u16_to_v10(tt_value))
+    set_state(ch, 'ent', v5)
+end
+-- | ch lfo spd (Hz*10) | C2 | 45-48, Hz*10 (+rst) |
+c2[44] = function (ch, v5)
+    --set_state(ch, 'lfr', 2 ^ u16_to_v10(tt_value))
+    set_state(ch, 'lfr', 2 ^ v5)
+end
+-- | ch lfo sym (R:F)   | C2 | 51-54, sym          |
+c2[50] = function (ch, v5)
+    --set_state(ch, 'lsy', tt_value / 16384)
+    set_state(ch, 'lsy', v5 / 5)
+end
+-- | ch lfo crv         | C2 | 55-58, exp          |
+-- | ch lfo>tmb         | C2 | 61-64, dep          |
+-- | ch lfo>frq         | C2 | 65-68, dep          |
+c2[64] = function (ch, v5)
+    --set_state(ch, 'lnt', u16_to_v10(tt_value))
+    set_state(ch, 'lnt', v5)
+end
+-- | set frq slew       | C2 | 71-74, frq          |
+-- | set tmb slew       | C2 | 75-78, frq          |
+-- | set mod slew       | C2 | 81-84, frq          |
+-- | select "engine"    | C2 | 85-88, p/s/n        |
+c2[84] = function (ch, v5)
+    --setup_synth(ch, tt_value)
+
+    v5 = math.min(math.abs(v5), 5)
+    setup_synth(ch, math.min(math.floor(v5 / 5 * 3) + 1), 3)
+end
+-- | load preset #      | C2 | 91-94, pset 0-9     |
+-- | save preset #      | C2 | 95-98, pset 0-9     |
+
 -- -32768 to 32767
-function u16_to_v(u16)
+function u16_to_v10(u16)
     return u16/16384*10;
+end
+
+function v10_to_u16(u16)
+    return u16/10*16384;
+end
+
+function v5_to_u16(u16)
+    return u16/5*16384;
 end
 
 function v8_to_freq(v8)
@@ -45,10 +126,21 @@ function setup_input()
 
     input[1].stream = function (v)
         -- local new = 1/((v+6) * 4000) -- time
-        local v = v8_to_freq(v)
+        --local hz = v8_to_freq(v)
+        -- print(v.."V = "..hz.."Hz = "..(v*12).." semitones")
+        if v < 0 then
+            v = v / 4.9514 * 5
+        else
+            v = v / 5.048 * 5
+        end
+        --print(((v < 0) and "" or " ")..v)
 
+        -- print("running cmd "..cmd.." on ch "..ch.." v "..v)
+        ;(c2[cmd] or bad_cmd)(ch,v,cmd)--KEEP SEMICOLON!
         for i = 1, 4 do
-            update_synth(i)
+            if i ~= nil then
+                update_synth(i)
+            end
         end
         --[[if not updating then
             updating = true
@@ -63,8 +155,12 @@ function setup_input()
             end
         end--]]
     end
+    input[1]{mode='stream', time=0.003}
 
-    input[1]{mode='stream', time=0.001}
+    input[2].stream = function (v)
+        collectgarbage("collect")
+    end
+    input[2]{mode='stream', time=10}
 end
 
 function setup_synth(output_index, model)
@@ -107,90 +203,50 @@ end
 
 function setup_synths()
     -- var saw/tri/ramp
-    setup_synth(1, 3)
-    setup_synth(2, 3)
-    setup_synth(3, 3)
-    setup_synth(4, 3)
+    setup_synth(1, 1)
+    setup_synth(2, 1)
+    setup_synth(3, 1)
+    setup_synth(4, 1)
 end
 
 function setup_i2c()
-    local bad_cmd = function (ch, value, cmd) 
-        print("don't know cmd "..cmd.."!")
+    ii.self.call1 = function (b1)
+        if b1 > 100 then
+            local eng = b1 % 10
+            local ch = ((b1 - eng) % 100) / 10
+            print("setting ch "..ch.." to eng "..eng)
+            setup_synth(ch, eng)
+        else
+            ch = (b1 % 10 % 4)
+            ch = (ch == 0 and 4) or ch
+            cmd = b1 - ch
+            print("setting cmd to "..cmd.." on ch "..ch)
+        end
     end
-    local c2 = {}
-    -- | ch play @ frq      | C2 | 01-04, frq          |
-    c2[00] = function (ch, value)
-        states[ch].nte = u16_to_v(value)
-        trigger_note(ch)
-    end
-    -- | ch play @ amp      | C2 | 05-08, amp (+rtrg)  |
-    -- | ch frq set (leg)   | C2 | 11-14, frq          |
-    -- | ch tmb set         | C2 | 15-18, tmb          |
-        -- this WILL BREAK LCG (no pw dyn)
-        -- there is a bug w/ model 1 when pw = 16250
-        -- detuned, undertones, sounds SICK
-        -- DO NOT FIX IT YET
-    c2[14] = function (ch, value)
-        set_state(ch, 'pw', value / 16384)
-    end
-    -- | ch env frq (Hz*10) | C2 | 21-24, Hz*10 (-lp)  |
-    c2[20] = function (ch, value)
-        set_state(ch, 'efr', 2 ^ u16_to_v(0 - value))
-    end
-    -- | ch env sym (A:D)   | C2 | 25-28, sym          |
-    c2[24] = function (ch, value)
-        set_state(ch, 'esy', value / 16384)
-    end
-    -- | ch env crv         | C2 | 31-34, exp          |
-    -- | ch env>tmb         | C2 | 35-38, dep          |
-    c2[34] = function (ch, value)
-        set_state(ch, 'epw', value / 16384)
-    end
-    -- | ch env>frq         | C2 | 41-44, dep          |
-    c2[40] = function (ch, value)
-        set_state(ch, 'ent', u16_to_v(value))
-    end
-    -- | ch lfo spd (Hz*10) | C2 | 45-48, Hz*10 (+rst) |
-    c2[44] = function (ch, value)
-        set_state(ch, 'lfr', 2 ^ u16_to_v(value))
-    end
-    -- | ch lfo sym (R:F)   | C2 | 51-54, sym          |
-    -- | ch lfo crv         | C2 | 55-58, exp          |
-    -- | ch lfo>tmb         | C2 | 61-64, dep          |
-    -- | ch lfo>frq         | C2 | 65-68, dep          |
-    c2[64] = function (ch, value)
-        set_state(ch, 'lnt', u16_to_v(value))
-    end
-    -- | set frq slew       | C2 | 71-74, frq          |
-    -- | set tmb slew       | C2 | 75-78, frq          |
-    -- | set mod slew       | C2 | 81-84, frq          |
-    -- | select "engine"    | C2 | 85-88, p/s/n        |
-    c2[84] = function (ch, value)
-        setup_synth(ch, value)
-    end
-    c2[98] = function (ch, value)
-        print("resettin "..ch)
-        output[ch].volts = 3
-    end
-    -- | load preset #      | C2 | 91-94, pset 0-9     |
-    -- | save preset #      | C2 | 95-98, pset 0-9     |
-
-    ii.self.call2 = function (cmd, x)
-        local ch = (cmd % 10 % 4)
+    ii.self.call2 = function (b1, x)
+        ch = (b1 % 10 % 4)
         ch = (ch == 0 and 4) or ch
-        cmd = cmd - ch
-        ;(c2[cmd] or bad_cmd)(ch,x,cmd)--KEEP SEMICOLON!
+        cmd = b1 - ch
+        --;(c2[cmd] or bad_cmd)(ch,x,cmd)--KEEP SEMICOLON!
+        print("I am count dracula "..ch.." "..x.." "..cmd)
     end
     ii.self.call3 = function (ch, note, vol)
     -- | play frq, amp      | C3 | 01-04, frq, amp     |
     -- | play preset, amp   | C3 | 11-14, frq, amp     |
-        local  v8 = u16_to_v(note)
-        local amp = u16_to_v( vol)
+        if ch == nil or note == nil or vol == nil or
+            ch < 1 or ch > 4 then 
+            return 
+        end
+        --print("ch:"..ch.." note:"..note.." vol:"..vol)
+        local  v8 = u16_to_v10(note)
+        local amp = u16_to_v10( vol)
+        --print("v8:"..v8.." amp:"..amp)
         -- too noisy for now
         -- print("C3: "..ch..", freq:"..freq..", amp:"..amp)
 
         states[ch].nte = v8
         states[ch].amp = amp
+        -- print("triggered")
         trigger_note(ch)
         -- output[ch].dyn.amp = amp -- not yet
     end
@@ -242,6 +298,7 @@ function acc(phase, freq, sec, looping)
 end
 
 function trigger_note(ch)
+    -- print("triggered "..ch)
     -- do not retrigger attack
     if states[ch].eph >= states[ch].esy then
         states[ch].eph = -1
@@ -258,22 +315,23 @@ function update_synth(i)
 
     -- env
     s.eph = acc(s.eph, s.efr, sec, false)
-    local env = peak(s.eph, s.esy, s.ecr)
+    local ampenv = peak(s.eph, s.esy, 3)
+    local modenv = peak(s.eph, s.esy, 4)
 
     -- lfo
     s.lph = acc(s.lph, s.lfr, sec, true)
     local lfo = peak(s.lph, s.lsy, s.lcr)
 
     -- freq
-    local note = s.nte + (env * s.ent) + (lfo * s.lnt)
+    local note = s.nte + (modenv * s.ent) + (lfo * s.lnt)
     local freq = v8_to_freq(note)
-    if freq == 0 then freq = 0.0000000001 end
+    if freq <= 0 then freq = 0.0000000001 end
     local cyc = 1/freq
-    if cyc == 0 then cyc = 0.0000000001 end
+    if cyc <= 0 then cyc = 0.0000000001 end
     output[i].dyn.cyc = cyc
 
     -- amp
-    output[i].dyn.amp = env * s.amp
+    output[i].dyn.amp = ampenv * s.amp
 
     -- timbre
     if s.mdl == 3 then
@@ -284,7 +342,7 @@ function update_synth(i)
         output[i].dyn.pw = math.abs(pw * 16384)
         output[i].dyn.pw2 = s.pw2
     else
-        local pw = s.pw + (env * s.epw) + (lfo * s.lpw)
+        local pw = s.pw + (modenv * s.epw) + (lfo * s.lpw)
         pw = math.max(-1, math.min(pw, 1))
         pw = (pw + 1) / 2
         output[i].dyn.pw = pw
@@ -301,7 +359,7 @@ function init ()
 
     setup_synths()
 
-    output[1].dyn.amp = 1
+    output[1].dyn.amp = 5
 
     output[2].dyn.amp = 0.25
 
